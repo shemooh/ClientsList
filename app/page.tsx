@@ -1,5 +1,4 @@
 "use client";
-
 import { useState, useEffect } from "react";
 import Layout from "@/components/Layout";
 import {
@@ -29,6 +28,23 @@ type Prospect = {
 };
 
 export default function ProspectingTool() {
+  const [password, setPassword] = useState("");
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  // Password to unlock the app
+  const correctPassword = "lsd";
+
+  const handlePasswordSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (password === correctPassword) {
+      setIsAuthenticated(true);
+    } else {
+      alert("Incorrect password");
+      setPassword("");
+    }
+  };
+
+  // States for the rest of the app after password
   const [prospects, setProspects] = useState<Prospect[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [newProspect, setNewProspect] = useState<Omit<Prospect, "id" | "date_added">>({
@@ -48,16 +64,18 @@ export default function ProspectingTool() {
   const [message, setMessage] = useState("");
 
   useEffect(() => {
-    async function fetchProspects() {
-      const { data, error } = await supabase.from("prospects").select("*");
-      if (error) {
-        console.error("Error loading prospects:", error);
-      } else {
-        setProspects(data || []);
+    if (isAuthenticated) {
+      async function fetchProspects() {
+        const { data, error } = await supabase.from("prospects").select("*");
+        if (error) {
+          console.error("Error loading prospects:", error);
+        } else {
+          setProspects(data || []);
+        }
       }
+      fetchProspects();
     }
-    fetchProspects();
-  }, []);
+  }, [isAuthenticated]);
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", darkMode);
@@ -131,6 +149,30 @@ export default function ProspectingTool() {
     link.download = "prospects.csv";
     link.click();
   };
+
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen flex flex-col justify-center items-center bg-gray-50 dark:bg-gray-900 p-4">
+        <form onSubmit={handlePasswordSubmit} className="bg-white dark:bg-gray-800 p-6 rounded shadow-md w-full max-w-sm">
+          <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-gray-50">Enter Password to Access</h2>
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Password"
+            className="w-full p-2 mb-4 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-50"
+            autoFocus
+          />
+          <button
+            type="submit"
+            className="w-full py-2 px-4 bg-gradient-to-r from-purple-500 to-indigo-600 text-white rounded hover:from-purple-600 hover:to-indigo-700 transition-all transform hover:scale-105"
+          >
+            Unlock
+          </button>
+        </form>
+      </div>
+    );
+  }
 
   return (
     <Layout>
