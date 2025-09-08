@@ -1,103 +1,463 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { useState, useEffect } from "react";
+import Layout from "@/components/Layout";
+import {
+  FiEdit,
+  FiTrash2,
+  FiEye,
+  FiSearch,
+  FiMoon,
+  FiSun,
+  FiX,
+  FiCheck,
+  FiUserPlus,
+  FiDownload,
+} from "react-icons/fi";
+
+import { supabase } from "@/lib/supabaseClient";
+
+type Prospect = {
+  id: number;
+  name: string;
+  email: string;
+  company: string;
+  status: "New" | "Contacted" | "Converted" | "Rejected";
+  source: "LinkedIn" | "Email" | "Twitter" | "Website";
+  date_added: string;
+  notes?: string;
+};
+
+export default function ProspectingTool() {
+  const [prospects, setProspects] = useState<Prospect[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [newProspect, setNewProspect] = useState<Omit<Prospect, "id" | "date_added">>({
+    name: "",
+    email: "",
+    company: "",
+    status: "New",
+    source: "LinkedIn",
+    notes: "",
+  });
+  const [statusFilter, setStatusFilter] = useState<Prospect["status"] | "All">("All");
+  const [sourceFilter, setSourceFilter] = useState<Prospect["source"] | "All">("All");
+  const [sortBy, setSortBy] = useState<"name" | "company" | "status" | "date_added">("date_added");
+  const [darkMode, setDarkMode] = useState(false);
+  const [selectedProspects, setSelectedProspects] = useState<number[]>([]);
+  const [isAddingProspect, setIsAddingProspect] = useState(false);
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    async function fetchProspects() {
+      const { data, error } = await supabase.from("prospects").select("*");
+      if (error) {
+        console.error("Error loading prospects:", error);
+      } else {
+        setProspects(data || []);
+      }
+    }
+    fetchProspects();
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", darkMode);
+  }, [darkMode]);
+
+  const filteredProspects = prospects
+    .filter(
+      (p) =>
+        p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        p.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        p.company.toLowerCase().includes(searchQuery.toLowerCase())
+    )
+    .filter((p) => statusFilter === "All" || p.status === statusFilter)
+    .filter((p) => sourceFilter === "All" || p.source === sourceFilter)
+    .sort((a, b) => {
+      if (sortBy === "date_added")
+        return new Date(b.date_added).getTime() - new Date(a.date_added).getTime();
+      return a[sortBy].localeCompare(b[sortBy]);
+    });
+
+  const handleAddProspect = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setMessage("Adding prospect...");
+    const prospectToAdd = {
+      ...newProspect,
+      date_added: new Date().toISOString().split("T")[0],
+    };
+    const { data, error } = await supabase.from("prospects").insert([prospectToAdd]).select().single();
+    if (error) {
+      console.error("Failed to add prospect:", error);
+      setMessage("Failed to add prospect. Please try again.");
+    } else if (data) {
+      setProspects([...prospects, data]);
+      setNewProspect({ name: "", email: "", company: "", status: "New", source: "LinkedIn", notes: "" });
+      setIsAddingProspect(false);
+      setMessage("Prospect added successfully!");
+      setTimeout(() => setMessage(""), 3000);
+    }
+  };
+
+  const handleDeleteProspect = async (id: number) => {
+    const { error } = await supabase.from("prospects").delete().eq("id", id);
+    if (error) {
+      console.error("Failed to delete prospect:", error);
+    } else {
+      setProspects(prospects.filter((p) => p.id !== id));
+      setSelectedProspects(selectedProspects.filter((sid) => sid !== id));
+    }
+  };
+
+  const toggleSelectProspect = (id: number) => {
+    setSelectedProspects(
+      selectedProspects.includes(id)
+        ? selectedProspects.filter((selectedId) => selectedId !== id)
+        : [...selectedProspects, id]
+    );
+  };
+
+  const exportToCSV = () => {
+    const headers = ["ID,Name,Email,Company,Status,Source,Date Added,Notes"].join("\n");
+    const csv = prospects
+      .map((p) =>
+        [p.id, p.name, p.email, p.company, p.status, p.source, p.date_added, p.notes || ""].join(",")
+      )
+      .join("\n");
+    const csvData = [headers, csv].join("\n");
+    const blob = new Blob([csvData], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "prospects.csv";
+    link.click();
+  };
+
   return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
-
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+    <Layout>
+      <div className={`min-h-screen p-8 ${darkMode ? "bg-gray-900 text-gray-50" : "bg-gray-50 text-gray-900"}`}>
+        {/* Header */}
+        <div className="flex justify-between items-center mb-8">
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-50">Potential Clients List</h1>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => setIsAddingProspect(!isAddingProspect)}
+              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-indigo-600 text-white rounded-lg hover:from-purple-600 hover:to-indigo-700 transition-all transform hover:scale-105 shadow-md"
+            >
+              <FiUserPlus /> {isAddingProspect ? "Cancel" : "Add Prospect"}
+            </button>
+            <button
+              onClick={() => setDarkMode(!darkMode)}
+              className="p-2 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+            >
+              {darkMode ? <FiSun /> : <FiMoon />}
+            </button>
+          </div>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+
+        {/* Message Display */}
+        {message && (
+          <div className="mb-4 p-3 rounded border border-purple-500 bg-purple-100 text-purple-800">
+            {message}
+          </div>
+        )}
+
+        {/* Main Content Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Left Side: Search, Filters, and Table */}
+          <div className="lg:col-span-2 space-y-6">
+            {/* Search and Filters */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="relative">
+                <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-300" />
+                <input
+                  type="text"
+                  placeholder="Search leads..."
+                  className="w-full pl-10 p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-50 transition-all"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value as Prospect["status"] | "All")}
+                className="p-3 border border-gray-300 rounded-lg bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-gray-50 focus:ring-2 focus:ring-purple-500 transition-all"
+              >
+                <option value="All">All Statuses</option>
+                <option value="New">New</option>
+                <option value="Contacted">Contacted</option>
+                <option value="Converted">Converted</option>
+                <option value="Rejected">Rejected</option>
+              </select>
+              <select
+                value={sourceFilter}
+                onChange={(e) => setSourceFilter(e.target.value as Prospect["source"] | "All")}
+                className="p-3 border border-gray-300 rounded-lg bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-gray-50 focus:ring-2 focus:ring-purple-500 transition-all"
+              >
+                <option value="All">All Sources</option>
+                <option value="LinkedIn">LinkedIn</option>
+                <option value="Email">Email</option>
+                <option value="Twitter">Twitter</option>
+                <option value="Website">Website</option>
+              </select>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as "name" | "company" | "status" | "date_added")}
+                className="p-3 border border-gray-300 rounded-lg bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-gray-50 focus:ring-2 focus:ring-purple-500 transition-all"
+              >
+                <option value="date_added">Sort by: Date Added</option>
+                <option value="name">Sort by: Name</option>
+                <option value="company">Sort by: Company</option>
+                <option value="status">Sort by: Status</option>
+              </select>
+            </div>
+
+            {/* Bulk Actions */}
+            {selectedProspects.length > 0 && (
+              <div className="flex gap-4 mb-4">
+                <button
+                  onClick={async () => {
+                    for (const id of selectedProspects) {
+                      await handleDeleteProspect(id);
+                    }
+                    setSelectedProspects([]);
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-lg hover:from-red-600 hover:to-red-700 transition-all transform hover:scale-105 shadow-md"
+                >
+                  <FiTrash2 /> Delete Selected
+                </button>
+                <button
+                  onClick={exportToCSV}
+                  className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg hover:from-green-600 hover:to-green-700 transition-all transform hover:scale-105 shadow-md"
+                >
+                  <FiDownload /> Export Selected
+                </button>
+              </div>
+            )}
+
+            {/* Prospect Table */}
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                  <thead className="bg-gray-50 dark:bg-gray-700">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <input
+                          type="checkbox"
+                          onChange={(e) =>
+                            setSelectedProspects(e.target.checked ? prospects.map((p) => p.id) : [])
+                          }
+                          checked={selectedProspects.length === prospects.length && prospects.length > 0}
+                          aria-label="Select all prospects"
+                        />
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Name
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Email
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Company
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Status
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Source
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Date Added
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200 dark:bg-gray-800 dark:divide-gray-700">
+                    {filteredProspects.map((prospect) => (
+                      <tr
+                        key={prospect.id}
+                        className={
+                          selectedProspects.includes(prospect.id)
+                            ? "bg-purple-50 dark:bg-purple-900/30"
+                            : "hover:bg-gray-50 dark:hover:bg-gray-700"
+                        }
+                      >
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <input
+                            type="checkbox"
+                            checked={selectedProspects.includes(prospect.id)}
+                            onChange={() => toggleSelectProspect(prospect.id)}
+                            aria-label={`Select prospect ${prospect.name}`}
+                          />
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-gray-900 dark:text-gray-50 font-medium">
+                          {prospect.name}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-gray-600 dark:text-gray-300">
+                          {prospect.email}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-gray-600 dark:text-gray-300 font-medium">
+                          {prospect.company}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span
+                            className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                              prospect.status === "New"
+                                ? "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300"
+                                : prospect.status === "Contacted"
+                                ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300"
+                                : prospect.status === "Converted"
+                                ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300"
+                                : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300"
+                            }`}
+                          >
+                            {prospect.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-gray-600 dark:text-gray-300">
+                          {prospect.source}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-gray-600 dark:text-gray-300">
+                          {prospect.date_added}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap flex gap-2">
+                          <button
+                            className="p-1.5 text-blue-500 dark:text-blue-400 rounded-full hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-all transform hover:scale-110"
+                            title="Edit"
+                            disabled
+                          >
+                            <FiEdit />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteProspect(prospect.id)}
+                            className="p-1.5 text-red-500 dark:text-red-400 rounded-full hover:bg-red-100 dark:hover:bg-red-900/30 transition-all transform hover:scale-110"
+                            title="Delete"
+                          >
+                            <FiTrash2 />
+                          </button>
+                          <button
+                            className="p-1.5 text-green-500 dark:text-green-400 rounded-full hover:bg-green-100 dark:hover:bg-green-900/30 transition-all transform hover:scale-110"
+                            title="View"
+                            disabled
+                          >
+                            <FiEye />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          {/* Right Side: Add Prospect Form */}
+          {isAddingProspect && (
+            <div className="lg:col-span-1 bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6 h-fit sticky top-8">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-50">Add New Prospect</h2>
+                <button
+                  onClick={() => setIsAddingProspect(false)}
+                  className="p-1.5 text-gray-500 dark:text-gray-300 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-all"
+                  aria-label="Cancel adding prospect"
+                >
+                  <FiX />
+                </button>
+              </div>
+              <form onSubmit={handleAddProspect} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Name
+                  </label>
+                  <input
+                    type="text"
+                    className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-50 transition-all"
+                    value={newProspect.name}
+                    onChange={(e) => setNewProspect({ ...newProspect, name: e.target.value })}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Email
+                  </label>
+                  <input
+                    type="email"
+                    className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-50 transition-all"
+                    value={newProspect.email}
+                    onChange={(e) => setNewProspect({ ...newProspect, email: e.target.value })}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Company
+                  </label>
+                  <input
+                    type="text"
+                    className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-50 transition-all"
+                    value={newProspect.company}
+                    onChange={(e) => setNewProspect({ ...newProspect, company: e.target.value })}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Status
+                  </label>
+                  <select
+                    className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-50 transition-all"
+                    value={newProspect.status}
+                    onChange={(e) =>
+                      setNewProspect({ ...newProspect, status: e.target.value as Prospect["status"] })
+                    }
+                  >
+                    <option value="New">New</option>
+                    <option value="Contacted">Contacted</option>
+                    <option value="Converted">Converted</option>
+                    <option value="Rejected">Rejected</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Source
+                  </label>
+                  <select
+                    className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-50 transition-all"
+                    value={newProspect.source}
+                    onChange={(e) =>
+                      setNewProspect({ ...newProspect, source: e.target.value as Prospect["source"] })
+                    }
+                  >
+                    <option value="LinkedIn">LinkedIn</option>
+                    <option value="Email">Email</option>
+                    <option value="Twitter">Twitter</option>
+                    <option value="Website">Website</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Notes
+                  </label>
+                  <textarea
+                    className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-50 transition-all"
+                    value={newProspect.notes}
+                    onChange={(e) => setNewProspect({ ...newProspect, notes: e.target.value })}
+                    rows={3}
+                  />
+                </div>
+                <button
+                  type="submit"
+                  className="w-full flex items-center justify-center gap-2 py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 transition-all transform hover:scale-105"
+                >
+                  <FiCheck /> Add Prospect
+                </button>
+              </form>
+            </div>
+          )}
+        </div>
+      </div>
+    </Layout>
   );
 }
